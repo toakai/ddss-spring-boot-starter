@@ -1,0 +1,26 @@
+{
+  "properties": [
+    {
+      "name": "dp.datasource.primary",
+      "type": "java.lang.String",
+      "description": "主库数据源 key，对应 dp.datasource.datasources 下的某个 key",
+      "defaultValue": ""
+    },
+    {
+      "name": "dp.datasource.mapper-locations",
+      "type": "java.util.List<java.lang.String>",
+      "description": "MyBatis Mapper XML 文件路径，支持 Ant 风格通配符，如 classpath*:mapper/**​/*.xml"
+    },
+    {
+      "name": "dp.datasource.map-underscore-to-camel-case",
+      "type": "java.lang.Boolean",
+      "description": "MyBatis 是否开启驼峰命名转换",
+      "defaultValue": true
+    },
+    {
+      "name": "dp.datasource.datasources",
+      "type": "java.util.Map<java.lang.String, java.util.Map<java.lang.String, java.lang.Object>>",
+      "description": "所有数据源配置，key 为数据源标识，value 为连接池属性"
+    }
+  ]
+}
