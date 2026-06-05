@@ -1,6 +1,5 @@
 package com.misky.ddss.aspect;
 
-import org.apache.commons.lang3.StringUtils;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -8,7 +7,11 @@ import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.core.annotation.Order;
+
+import org.springframework.util.StringUtils;
 
 import com.misky.ddss.annotation.DataSource;
 import com.misky.ddss.core.DynamicDataSource;
@@ -35,18 +38,28 @@ public class DataSourceAspect {
     @Around("pointCut()")
     public Object doAround(ProceedingJoinPoint point) throws Throwable {
         MethodSignature signature = (MethodSignature) point.getSignature();
-        DataSource methodDs = signature.getMethod().getAnnotation(DataSource.class);
-        DataSource classDs = signature.getMethod().getDeclaringClass().getAnnotation(DataSource.class);
+
+        // 方法级注解（使用 AnnotationUtils 支持继承链）
+        DataSource methodDs =
+                AnnotationUtils.findAnnotation(signature.getMethod(), DataSource.class);
+
+        // 类级注解：先查声明类，再查运行时目标类（支持代理和子类场景）
+        DataSource classDs = AnnotationUtils.findAnnotation(
+                signature.getMethod().getDeclaringClass(), DataSource.class);
+        if (classDs == null && point.getTarget() != null) {
+            Class<?> targetClass = AopUtils.getTargetClass(point.getTarget());
+            classDs = AnnotationUtils.findAnnotation(targetClass, DataSource.class);
+        }
 
         // 方法级优先，其次类级
         String dataSource = null;
-        if (methodDs != null && StringUtils.isNotBlank(methodDs.value())) {
+        if (methodDs != null && StringUtils.hasText(methodDs.value())) {
             dataSource = methodDs.value();
-        } else if (classDs != null && StringUtils.isNotBlank(classDs.value())) {
+        } else if (classDs != null && StringUtils.hasText(classDs.value())) {
             dataSource = classDs.value();
         }
 
-        if (StringUtils.isNotBlank(dataSource)) {
+        if (StringUtils.hasText(dataSource)) {
             DynamicDataSource.setDataSource(dataSource);
             log.debug("切换数据源：{}", dataSource);
         }

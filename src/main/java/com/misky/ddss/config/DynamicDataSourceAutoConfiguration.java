@@ -1,5 +1,6 @@
 package com.misky.ddss.config;
 
+import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -159,16 +160,27 @@ public class DynamicDataSourceAutoConfiguration {
                                     value = Long.valueOf(value.toString());
                                 } else if (propType == boolean.class || propType == Boolean.class) {
                                     value = Boolean.valueOf(value.toString());
+                                } else if (propType == String.class) {
+                                    // YAML 中 password: 123 会被解析为整数，需转为字符串
+                                    value = value.toString();
                                 }
                             }
                             pd.getWriteMethod().invoke(dataSource, value);
                             break;
                         }
                     }
-                } catch (Exception ignored) {
-                    // 跳过无法设置的属性（如 druid 子配置）
+                } catch (Exception e) {
+                    log.debug("跳过属性 [{}]（无对应 setter 或类型不兼容）：{}", prop.getKey(), e.getMessage());
                 }
             }
+            // 连接验证（fail-fast：配置错误在启动时暴露）
+            try (Connection ignored = dataSource.getConnection()) {
+                log.info("数据源 [{}] 连接验证通过", key);
+            } catch (Exception e) {
+                throw new IllegalStateException(
+                        "数据源 [" + key + "] 连接验证失败，请检查 URL、用户名、密码", e);
+            }
+
             return dataSource;
         } catch (Exception e) {
             throw new IllegalStateException("创建数据源 [" + key + "] 失败", e);

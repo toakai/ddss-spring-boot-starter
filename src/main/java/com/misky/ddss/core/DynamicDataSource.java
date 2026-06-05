@@ -1,5 +1,6 @@
 package com.misky.ddss.core;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,9 +37,15 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
         DynamicDataSource.primaryDataSourceKey = primaryKey;
     }
 
+    /**
+     * 决定当前线程使用的数据源 key
+     *
+     * <p>如果线程未绑定数据源，默认返回主库 key。</p>
+     */
     @Override
     protected Object determineCurrentLookupKey() {
-        return getDataSource();
+        String key = CONTEXT_HOLDER.get();
+        return (key != null) ? key : primaryDataSourceKey;
     }
 
     // ======================== 编程式 API ========================
@@ -53,14 +60,13 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
     }
 
     /**
-     * 获取当前线程的数据源标识，未设置时回退到主库
+     * 获取当前线程绑定的数据源标识
+     *
+     * <p>如果未绑定，返回 {@link #getPrimaryDataSourceKey()} 主库标识。</p>
      */
     public static String getDataSource() {
         String dataSource = CONTEXT_HOLDER.get();
-        if (dataSource == null) {
-            setDataSource(primaryDataSourceKey);
-        }
-        return CONTEXT_HOLDER.get();
+        return (dataSource != null) ? dataSource : primaryDataSourceKey;
     }
 
     /**
@@ -79,8 +85,10 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
 
     /**
      * 获取所有已解析的数据源（供测试和运维使用）
+     *
+     * @return 不可修改的视图，防止外部误修改内部状态
      */
     public Map<Object, DataSource> getResolvedDataSources() {
-        return super.getResolvedDataSources();
+        return Collections.unmodifiableMap(super.getResolvedDataSources());
     }
 }
