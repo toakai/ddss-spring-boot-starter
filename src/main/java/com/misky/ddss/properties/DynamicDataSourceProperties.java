@@ -46,6 +46,14 @@ public class DynamicDataSourceProperties {
     private boolean mapUnderscoreToCamelCase = true;
 
     /**
+     * 是否启用 SQL 执行日志（DEBUG 级别）
+     * <p>开启后，每次 MyBatis 执行 SQL 时会输出当前使用的数据源 key，
+     * 方便排查数据源切换问题。</p>
+     * <p>默认 false，避免生产环境日志量过大。</p>
+     */
+    private boolean sqlLogEnabled = false;
+
+    /**
      * 所有数据源配置，key 为数据源标识（如 master、slave），value 为连接池参数
      * <p>支持 Druid 和 HikariCP 两种连接池实现</p>
      */
@@ -75,6 +83,14 @@ public class DynamicDataSourceProperties {
 
     public void setMapUnderscoreToCamelCase(boolean mapUnderscoreToCamelCase) {
         this.mapUnderscoreToCamelCase = mapUnderscoreToCamelCase;
+    }
+
+    public boolean isSqlLogEnabled() {
+        return sqlLogEnabled;
+    }
+
+    public void setSqlLogEnabled(boolean sqlLogEnabled) {
+        this.sqlLogEnabled = sqlLogEnabled;
     }
 
     public Map<String, Map<String, Object>> getDatasources() {

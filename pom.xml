@@ -45,6 +45,13 @@
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
+        <!-- Spring Boot Actuator（optional：提供数据源健康检查） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- MyBatis（optional：不使用 MyBatis 的项目不会强制引入） -->
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>

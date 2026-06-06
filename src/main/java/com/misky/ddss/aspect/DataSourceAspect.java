@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 
 import org.springframework.util.StringUtils;
@@ -23,9 +24,13 @@ import com.misky.ddss.core.DynamicDataSource;
  * 执行后清除 ThreadLocal 恢复默认。</p>
  *
  * <p>优先级：方法级注解 &gt; 类级注解 &gt; 默认主库</p>
+ *
+ * <p>事务顺序：{@code @Order(Ordered.HIGHEST_PRECEDENCE + 10)} 确保数据源切换
+ * 在事务拦截器（{@link org.springframework.transaction.interceptor.TransactionInterceptor}）之前执行，
+ * 避免事务绑定到错误的数据源。</p>
  */
 @Aspect
-@Order(-1)
+@Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class DataSourceAspect {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceAspect.class);

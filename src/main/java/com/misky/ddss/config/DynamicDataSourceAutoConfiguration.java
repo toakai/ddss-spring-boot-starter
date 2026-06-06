@@ -127,6 +127,21 @@ public class DynamicDataSourceAutoConfiguration {
     }
 
     /**
+     * SQL 执行日志拦截器（可选）
+     * <p>通过 {@code dp.datasource.sql-log-enabled=true} 启用。</p>
+     */
+    @Bean
+    @ConditionalOnClass(name = "org.apache.ibatis.plugin.Interceptor")
+    @ConditionalOnMissingBean(name = "dataSourceSqlLogInterceptor")
+    public org.apache.ibatis.plugin.Interceptor dataSourceSqlLogInterceptor() {
+        if (properties.isSqlLogEnabled()) {
+            log.info("已启用 SQL 执行日志拦截器");
+            return new com.misky.ddss.interceptor.DataSourceSqlLogInterceptor();
+        }
+        return null;
+    }
+
+    /**
      * 根据配置创建 DataSource 实例
      * <p>支持 Druid（默认）和 HikariCP，也可通过 {@code type} 指定其他实现</p>
      */
@@ -206,7 +221,8 @@ public class DynamicDataSourceAutoConfiguration {
     @ConditionalOnMissingBean(name = "sqlSessionFactory")
     public SqlSessionFactory sqlSessionFactory(
             @Qualifier("dynamicDataSource") DataSource dynamicDataSource,
-            ObjectProvider<org.apache.ibatis.session.Configuration> configurationProvider) throws Exception {
+            ObjectProvider<org.apache.ibatis.session.Configuration> configurationProvider,
+            ObjectProvider<org.apache.ibatis.plugin.Interceptor> sqlLogInterceptorProvider) throws Exception {
 
         SqlSessionFactoryBean factoryBean = new SqlSessionFactoryBean();
         factoryBean.setDataSource(dynamicDataSource);
@@ -237,6 +253,13 @@ public class DynamicDataSourceAutoConfiguration {
             configuration.setMapUnderscoreToCamelCase(true);
         }
         factoryBean.setConfiguration(configuration);
+
+        // 注入 SQL 日志拦截器（如果启用）
+        org.apache.ibatis.plugin.Interceptor sqlLogInterceptor = sqlLogInterceptorProvider.getIfAvailable();
+        if (sqlLogInterceptor != null) {
+            factoryBean.setPlugins(new org.apache.ibatis.plugin.Interceptor[]{sqlLogInterceptor});
+            log.info("已注入 MyBatis 插件：DataSourceSqlLogInterceptor");
+        }
 
         return factoryBean.getObject();
     }

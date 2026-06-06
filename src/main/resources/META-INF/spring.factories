@@ -1,2 +1,3 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-com.misky.ddss.config.DynamicDataSourceAutoConfiguration
+com.misky.ddss.config.DynamicDataSourceAutoConfiguration,\
+com.misky.ddss.config.DynamicDataSourceActuatorAutoConfiguration

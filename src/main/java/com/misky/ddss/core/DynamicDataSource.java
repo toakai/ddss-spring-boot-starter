@@ -1,5 +1,7 @@
 package com.misky.ddss.core;
 
+import java.io.Closeable;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -8,6 +10,7 @@ import javax.sql.DataSource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
 
 /**
@@ -18,8 +21,10 @@ import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
  *
  * <p>数据源切换由 {@code DataSourceAspect} 在方法级别自动控制，
  * 也可手动调用 {@link #setDataSource(String)} 进行编程式切换。</p>
+ *
+ * <p>实现 {@link DisposableBean}，应用关闭时自动关闭所有数据源连接池。</p>
  */
-public class DynamicDataSource extends AbstractRoutingDataSource {
+public class DynamicDataSource extends AbstractRoutingDataSource implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(DynamicDataSource.class);
 
@@ -29,12 +34,16 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
     /** 主库（默认）数据源标识 */
     private static String primaryDataSourceKey;
 
+    /** 所有目标数据源，用于优雅关闭 */
+    private Map<String, DataSource> targetDataSources;
+
     public DynamicDataSource(DataSource defaultDataSource, String primaryKey,
                              Map<String, DataSource> targetDataSources) {
         super.setDefaultTargetDataSource(defaultDataSource);
         super.setTargetDataSources(new HashMap<>(targetDataSources));
         super.afterPropertiesSet();
         DynamicDataSource.primaryDataSourceKey = primaryKey;
+        this.targetDataSources = new HashMap<>(targetDataSources);
     }
 
     /**
@@ -89,5 +98,30 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
      */
     public Map<Object, DataSource> getResolvedDataSources() {
         return Collections.unmodifiableMap(super.getResolvedDataSources());
+    }
+
+    /**
+     * 优雅关闭：应用关闭时自动关闭所有数据源连接池
+     *
+     * <p>实现 {@link DisposableBean} 接口，
+     * Spring 容器销毁时自动调用此方法。</p>
+     */
+    @Override
+    public void destroy() throws Exception {
+        log.info("开始关闭所有数据源，共 {} 个", targetDataSources.size());
+        for (Map.Entry<String, DataSource> entry : targetDataSources.entrySet()) {
+            String key = entry.getKey();
+            DataSource ds = entry.getValue();
+            try {
+                if (ds instanceof Closeable) {
+                    ((Closeable) ds).close();
+                    log.info("数据源 [{}] 已关闭", key);
+                }
+            } catch (Exception e) {
+                log.warn("数据源 [{}] 关闭失败：{}", key, e.getMessage());
+            }
+        }
+        targetDataSources.clear();
+        log.info("所有数据源关闭完成");
     }
 }
