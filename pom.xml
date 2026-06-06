@@ -45,6 +45,13 @@
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
+        <!-- SpEL 表达式解析（用于 @DataSource 支持 SpEL） -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-expression</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Spring Boot Actuator（optional：提供数据源健康检查） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

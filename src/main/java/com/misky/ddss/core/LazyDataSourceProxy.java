@@ -55,6 +55,14 @@ public class LazyDataSourceProxy implements DataSource, Closeable {
         return delegate != null;
     }
 
+    /**
+     * 获取底层真实数据源（仅初始化后可用）
+     * <p>用于需要访问真实连接池配置的场景（如本地事务管理）。</p>
+     */
+    public DataSource getTargetDataSource() {
+        return delegate;
+    }
+
     // ======================== DataSource 代理 ========================
 
     @Override

@@ -193,6 +193,11 @@ public class DynamicDataSourceAutoConfiguration {
         return new DataSourceAspect();
     }
 
+    @Bean
+    public com.misky.ddss.aspect.LocalTransactionAspect localTransactionAspect() {
+        return new com.misky.ddss.aspect.LocalTransactionAspect();
+    }
+
     /**
      * SQL 执行日志拦截器（可选）
      * <p>通过 {@code dp.datasource.sql-log-enabled=true} 启用。</p>
