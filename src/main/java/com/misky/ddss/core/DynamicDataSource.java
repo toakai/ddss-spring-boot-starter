@@ -40,12 +40,11 @@ public class DynamicDataSource extends AbstractRoutingDataSource {
     /**
      * 决定当前线程使用的数据源 key
      *
-     * <p>如果线程未绑定数据源，默认返回主库 key。</p>
+     * <p>委托给 {@link #getDataSource()}，保持逻辑单一来源。</p>
      */
     @Override
     protected Object determineCurrentLookupKey() {
-        String key = CONTEXT_HOLDER.get();
-        return (key != null) ? key : primaryDataSourceKey;
+        return getDataSource();
     }
 
     // ======================== 编程式 API ========================
