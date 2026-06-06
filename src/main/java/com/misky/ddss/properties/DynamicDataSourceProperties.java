@@ -1,9 +1,13 @@
 package com.misky.ddss.properties;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import com.misky.ddss.core.LoadBalanceStrategy;
 
 /**
  * 多数据源配置属性
@@ -56,8 +60,22 @@ public class DynamicDataSourceProperties {
     /**
      * 所有数据源配置，key 为数据源标识（如 master、slave），value 为连接池参数
      * <p>支持 Druid 和 HikariCP 两种连接池实现</p>
+     * <p>每个数据源可设置 {@code lazy: true} 启用懒加载</p>
      */
     private Map<String, Map<String, Object>> datasources = new LinkedHashMap<>();
+
+    /**
+     * 数据源分组（读写分离 &amp; 负载均衡）
+     *
+     * <p>配置示例：
+     * <pre>
+     * dp.datasource.groups.slaves:
+     *   datasources: [slave1, slave2]
+     *   strategy: ROUND_ROBIN
+     * </pre>
+     * 使用 {@code @DataSource("slaves")} 即可按策略选择从库。
+     */
+    private Map<String, GroupConfig> groups = new LinkedHashMap<>();
 
     // ==================== getters & setters ====================
 
@@ -99,5 +117,43 @@ public class DynamicDataSourceProperties {
 
     public void setDatasources(Map<String, Map<String, Object>> datasources) {
         this.datasources = datasources;
+    }
+
+    public Map<String, GroupConfig> getGroups() {
+        return groups;
+    }
+
+    public void setGroups(Map<String, GroupConfig> groups) {
+        this.groups = groups;
+    }
+
+    // ==================== 内部类 ====================
+
+    /**
+     * 数据源分组配置
+     */
+    public static class GroupConfig {
+
+        /** 组成员数据源 key 列表（必填） */
+        private List<String> datasources = new ArrayList<>();
+
+        /** 负载均衡策略，默认 ROUND_ROBIN */
+        private LoadBalanceStrategy strategy = LoadBalanceStrategy.ROUND_ROBIN;
+
+        public List<String> getDatasources() {
+            return datasources;
+        }
+
+        public void setDatasources(List<String> datasources) {
+            this.datasources = datasources;
+        }
+
+        public LoadBalanceStrategy getStrategy() {
+            return strategy;
+        }
+
+        public void setStrategy(LoadBalanceStrategy strategy) {
+            this.strategy = strategy;
+        }
     }
 }

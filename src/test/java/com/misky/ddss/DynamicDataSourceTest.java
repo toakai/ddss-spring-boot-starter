@@ -27,6 +27,9 @@ class DynamicDataSourceTest {
 
     @BeforeEach
     void setUp() {
+        // 重置 ThreadLocal 栈，确保每个测试从干净状态开始
+        DynamicDataSource.clearAll();
+
         masterDs = new HikariDataSource();
         masterDs.setJdbcUrl("jdbc:h2:mem:master;DB_CLOSE_DELAY=-1");
         masterDs.setUsername("sa");
@@ -91,5 +94,27 @@ class DynamicDataSourceTest {
         });
         thread.start();
         thread.join();
+
+        // 清理主线程的绑定
+        DynamicDataSource.clearDataSource();
+    }
+
+    @Test
+    void testNestedDataSourceSwitch() {
+        // 模拟 AOP 嵌套：外层方法用 A，内层方法用 B
+        DynamicDataSource.setDataSource("slave");
+        assertEquals("slave", DynamicDataSource.getDataSource());
+
+        // 内层切换
+        DynamicDataSource.setDataSource("master");
+        assertEquals("master", DynamicDataSource.getDataSource());
+
+        // 内层结束，恢复外层
+        DynamicDataSource.clearDataSource();
+        assertEquals("slave", DynamicDataSource.getDataSource());
+
+        // 外层结束，恢复主库
+        DynamicDataSource.clearDataSource();
+        assertEquals("master", DynamicDataSource.getDataSource());
     }
 }

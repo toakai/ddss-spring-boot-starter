@@ -1,7 +1,9 @@
 package com.misky.ddss.config;
 
 import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.sql.DataSource;
@@ -19,7 +21,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -30,6 +31,9 @@ import com.alibaba.druid.pool.DruidDataSource;
 
 import com.misky.ddss.aspect.DataSourceAspect;
 import com.misky.ddss.core.DynamicDataSource;
+import com.misky.ddss.core.GroupDataSource;
+import com.misky.ddss.core.LazyDataSourceProxy;
+import com.misky.ddss.core.LoadBalanceStrategy;
 import com.misky.ddss.properties.DynamicDataSourceProperties;
 
 /**
@@ -73,7 +77,6 @@ import com.misky.ddss.properties.DynamicDataSourceProperties;
 @Configuration
 @EnableConfigurationProperties(DynamicDataSourceProperties.class)
 @ConditionalOnProperty(prefix = "dp.datasource", name = "primary")
-@Import(DataSourceAspect.class)
 public class DynamicDataSourceAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(DynamicDataSourceAutoConfiguration.class);
@@ -104,15 +107,57 @@ public class DynamicDataSourceAutoConfiguration {
         Map<String, DataSource> targetDataSources = new HashMap<>();
         DataSource primaryDataSource = null;
 
+        // 1. 创建各数据源（支持懒加载）
         for (Map.Entry<String, Map<String, Object>> entry : dsConfigs.entrySet()) {
             String key = entry.getKey();
             Map<String, Object> config = entry.getValue();
-            DataSource ds = createDataSource(key, config);
+            boolean lazy = isLazy(config);
+
+            DataSource ds;
+            if (lazy) {
+                // 懒加载：创建代理，首次访问时才真正创建连接池
+                ds = new LazyDataSourceProxy(key, () -> createDataSource(key, config));
+                log.info("已注册数据源 [{}]（懒加载）", key);
+            } else {
+                ds = createDataSource(key, config);
+                log.info("已注册数据源：{}", key);
+            }
             targetDataSources.put(key, ds);
-            log.info("已注册数据源：{}", key);
 
             if (key.equals(primaryKey)) {
                 primaryDataSource = ds;
+            }
+        }
+
+        // 2. 处理数据源分组（读写分离 / 负载均衡）
+        Map<String, DynamicDataSourceProperties.GroupConfig> groups = properties.getGroups();
+        if (groups != null && !groups.isEmpty()) {
+            for (Map.Entry<String, DynamicDataSourceProperties.GroupConfig> entry : groups.entrySet()) {
+                String groupName = entry.getKey();
+                DynamicDataSourceProperties.GroupConfig groupConfig = entry.getValue();
+                List<String> groupMembers = groupConfig.getDatasources();
+                LoadBalanceStrategy strategy = groupConfig.getStrategy();
+
+                if (groupMembers == null || groupMembers.isEmpty()) {
+                    log.warn("数据源组 [{}] 未配置成员，跳过", groupName);
+                    continue;
+                }
+
+                List<DataSource> members = new ArrayList<>();
+                for (String memberKey : groupMembers) {
+                    DataSource memberDs = targetDataSources.get(memberKey);
+                    if (memberDs == null) {
+                        throw new IllegalStateException(
+                                "数据源组 [" + groupName + "] 引用的成员 [" + memberKey +
+                                "] 未在 dp.datasource.datasources 中定义。" +
+                                "已定义的数据源：" + targetDataSources.keySet());
+                    }
+                    members.add(memberDs);
+                }
+
+                GroupDataSource groupDs = new GroupDataSource(groupName, members, strategy);
+                targetDataSources.put(groupName, groupDs);
+                log.info("已注册数据源组 [{}]：成员={}, 策略={}", groupName, groupMembers, strategy);
             }
         }
 
@@ -122,8 +167,30 @@ public class DynamicDataSourceAutoConfiguration {
                     "已注册的数据源：" + targetDataSources.keySet());
         }
 
-        log.info("动态数据源初始化完成，共 {} 个数据源，主库：{}", targetDataSources.size(), primaryKey);
+        log.info("动态数据源初始化完成，共 {} 个数据源（含分组），主库：{}",
+                targetDataSources.size(), primaryKey);
         return new DynamicDataSource(primaryDataSource, primaryKey, targetDataSources);
+    }
+
+    /**
+     * 判断数据源是否配置为懒加载
+     */
+    private static boolean isLazy(Map<String, Object> config) {
+        Object lazy = config.get("lazy");
+        if (lazy == null) {
+            return false;
+        }
+        if (lazy instanceof Boolean) {
+            return (Boolean) lazy;
+        }
+        return "true".equalsIgnoreCase(lazy.toString());
+    }
+
+    // ======================== AOP 切面 ========================
+
+    @Bean
+    public DataSourceAspect dataSourceAspect() {
+        return new DataSourceAspect();
     }
 
     /**
@@ -132,13 +199,10 @@ public class DynamicDataSourceAutoConfiguration {
      */
     @Bean
     @ConditionalOnClass(name = "org.apache.ibatis.plugin.Interceptor")
-    @ConditionalOnMissingBean(name = "dataSourceSqlLogInterceptor")
+    @ConditionalOnProperty(prefix = "dp.datasource", name = "sql-log-enabled", havingValue = "true")
     public org.apache.ibatis.plugin.Interceptor dataSourceSqlLogInterceptor() {
-        if (properties.isSqlLogEnabled()) {
-            log.info("已启用 SQL 执行日志拦截器");
-            return new com.misky.ddss.interceptor.DataSourceSqlLogInterceptor();
-        }
-        return null;
+        log.info("已启用 SQL 执行日志拦截器");
+        return new com.misky.ddss.interceptor.DataSourceSqlLogInterceptor();
     }
 
     /**
@@ -153,9 +217,9 @@ public class DynamicDataSourceAutoConfiguration {
             Class<? extends DataSource> type = (Class<? extends DataSource>) Class.forName(typeStr);
             DataSource dataSource = type.getDeclaredConstructor().newInstance();
 
-            // 通过反射设置属性：去掉 type 后逐个 set
+            // 通过反射设置属性：去掉 type/lazy 等保留字后逐个 set
             for (Map.Entry<String, Object> prop : config.entrySet()) {
-                if ("type".equals(prop.getKey())) {
+                if ("type".equals(prop.getKey()) || "lazy".equals(prop.getKey())) {
                     continue;
                 }
                 // 尝试设置属性（跳过不存在 setter 的属性，如 druid 子节点）

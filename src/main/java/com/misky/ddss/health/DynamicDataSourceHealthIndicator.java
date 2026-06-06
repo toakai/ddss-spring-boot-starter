@@ -11,6 +11,7 @@ import org.springframework.boot.actuate.health.AbstractHealthIndicator;
 import org.springframework.boot.actuate.health.Health;
 
 import com.misky.ddss.core.DynamicDataSource;
+import com.misky.ddss.core.LazyDataSourceProxy;
 
 /**
  * 多数据源健康检查
@@ -47,10 +48,9 @@ public class DynamicDataSourceHealthIndicator extends AbstractHealthIndicator {
     @Override
     protected void doHealthCheck(Health.Builder builder) {
         Map<Object, DataSource> dataSources = dynamicDataSource.getResolvedDataSources();
-        builder.up();
 
         if (dataSources == null || dataSources.isEmpty()) {
-            builder.withDetail("message", "没有已解析的数据源");
+            builder.unknown().withDetail("message", "没有已解析的数据源");
             return;
         }
 
@@ -60,6 +60,15 @@ public class DynamicDataSourceHealthIndicator extends AbstractHealthIndicator {
         for (Map.Entry<Object, DataSource> entry : dataSources.entrySet()) {
             String key = String.valueOf(entry.getKey());
             DataSource ds = entry.getValue();
+
+            // 懒加载数据源：未初始化时不触发连接，避免意外的懒初始化
+            if (ds instanceof LazyDataSourceProxy
+                    && !((LazyDataSourceProxy) ds).isInitialized()) {
+                builder.withDetail(key, "LAZY (not yet initialized)");
+                log.debug("数据源 [{}] 健康检查：LAZY（尚未初始化）", key);
+                continue;
+            }
+
             try (Connection ignored = ds.getConnection()) {
                 builder.withDetail(key, "UP");
                 upCount++;
@@ -75,8 +84,12 @@ public class DynamicDataSourceHealthIndicator extends AbstractHealthIndicator {
         builder.withDetail("up", upCount);
         builder.withDetail("down", downCount);
 
-        if (downCount > 0) {
+        if (downCount == dataSources.size()) {
+            builder.down();
+        } else if (downCount > 0) {
             builder.status("DEGRADED");
+        } else {
+            builder.up();
         }
     }
 }

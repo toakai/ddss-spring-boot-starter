@@ -18,9 +18,20 @@
       "defaultValue": true
     },
     {
+      "name": "dp.datasource.sql-log-enabled",
+      "type": "java.lang.Boolean",
+      "description": "是否启用 SQL 执行日志拦截器（DEBUG 级别输出当前数据源）",
+      "defaultValue": false
+    },
+    {
       "name": "dp.datasource.datasources",
       "type": "java.util.Map<java.lang.String, java.util.Map<java.lang.String, java.lang.Object>>",
-      "description": "所有数据源配置，key 为数据源标识，value 为连接池属性"
+      "description": "所有数据源配置，key 为数据源标识，value 为连接池属性。每个数据源可设置 lazy: true 启用懒加载"
+    },
+    {
+      "name": "dp.datasource.groups",
+      "type": "java.util.Map<java.lang.String, com.misky.ddss.properties.DynamicDataSourceProperties$GroupConfig>",
+      "description": "数据源分组（读写分离 & 负载均衡），key 为分组名，可通过 @DataSource(\"分组名\") 使用"
     }
   ]
 }
