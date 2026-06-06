@@ -84,12 +84,15 @@ public class DynamicDataSourceHealthIndicator extends AbstractHealthIndicator {
         builder.withDetail("up", upCount);
         builder.withDetail("down", downCount);
 
-        if (downCount == dataSources.size()) {
-            builder.down();
-        } else if (downCount > 0) {
-            builder.status("DEGRADED");
-        } else {
+        if (upCount == 0 && downCount == 0) {
+            // 所有数据源均为 LAZY 且未初始化，无法判断健康状况
+            builder.unknown().withDetail("message", "所有数据源均为懒加载且尚未初始化");
+        } else if (downCount == 0) {
             builder.up();
+        } else if (upCount > 0) {
+            builder.status("DEGRADED").withDetail("message", "部分数据源不可用");
+        } else {
+            builder.down();
         }
     }
 }

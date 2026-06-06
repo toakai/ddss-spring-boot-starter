@@ -16,7 +16,6 @@
         <spring-boot.version>2.7.18</spring-boot.version>
         <mybatis-springboot.version>2.2.2</mybatis-springboot.version>
         <druid.version>1.2.25</druid.version>
-        <commons-lang3.version>3.18.0</commons-lang3.version>
     </properties>
 
     <dependencyManagement>
@@ -73,12 +72,6 @@
             <artifactId>druid-spring-boot-starter</artifactId>
             <version>${druid.version}</version>
             <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang3.version}</version>
         </dependency>
 
         <dependency>

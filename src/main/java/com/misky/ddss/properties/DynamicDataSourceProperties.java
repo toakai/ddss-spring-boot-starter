@@ -58,6 +58,13 @@ public class DynamicDataSourceProperties {
     private boolean sqlLogEnabled = false;
 
     /**
+     * 启动时是否验证数据源连接（fail-fast）
+     * <p>默认 true，即启动时立即尝试获取连接以验证配置是否正确。
+     * 若设置为 false，则延迟到首次业务请求时才验证，适用于数据库启动顺序不可控的场景。</p>
+     */
+    private boolean connectionValidationEnabled = true;
+
+    /**
      * 所有数据源配置，key 为数据源标识（如 master、slave），value 为连接池参数
      * <p>支持 Druid 和 HikariCP 两种连接池实现</p>
      * <p>每个数据源可设置 {@code lazy: true} 启用懒加载</p>
@@ -109,6 +116,14 @@ public class DynamicDataSourceProperties {
 
     public void setSqlLogEnabled(boolean sqlLogEnabled) {
         this.sqlLogEnabled = sqlLogEnabled;
+    }
+
+    public boolean isConnectionValidationEnabled() {
+        return connectionValidationEnabled;
+    }
+
+    public void setConnectionValidationEnabled(boolean connectionValidationEnabled) {
+        this.connectionValidationEnabled = connectionValidationEnabled;
     }
 
     public Map<String, Map<String, Object>> getDatasources() {

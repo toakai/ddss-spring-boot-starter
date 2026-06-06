@@ -37,8 +37,8 @@ public class DynamicDataSource extends AbstractRoutingDataSource implements Disp
     private static final ThreadLocal<Deque<String>> CONTEXT_HOLDER =
             ThreadLocal.withInitial(ArrayDeque::new);
 
-    /** 主库（默认）数据源标识 */
-    private static String primaryDataSourceKey;
+    /** 主库（默认）数据源标识。volatile 确保多线程可见，多个 DynamicDataSource 实例写入时安全。 */
+    private static volatile String primaryDataSourceKey;
 
     /** 所有目标数据源，用于优雅关闭 */
     private Map<String, DataSource> targetDataSources;
@@ -48,7 +48,15 @@ public class DynamicDataSource extends AbstractRoutingDataSource implements Disp
         super.setDefaultTargetDataSource(defaultDataSource);
         super.setTargetDataSources(new HashMap<>(targetDataSources));
         super.afterPropertiesSet();
+
+        // 防御性检查：如果已存在其他实例设置的 primaryKey，记录警告
+        String previous = DynamicDataSource.primaryDataSourceKey;
+        if (previous != null && !previous.equals(primaryKey)) {
+            log.warn("主库 key 从 [{}] 覆盖为 [{}]，可能存在多个 DynamicDataSource 实例？",
+                    previous, primaryKey);
+        }
         DynamicDataSource.primaryDataSourceKey = primaryKey;
+
         this.targetDataSources = new HashMap<>(targetDataSources);
     }
 

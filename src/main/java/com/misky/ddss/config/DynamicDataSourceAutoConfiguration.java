@@ -8,21 +8,14 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.mybatis.spring.SqlSessionFactoryBean;
-import org.mybatis.spring.SqlSessionTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.util.StringUtils;
@@ -30,6 +23,7 @@ import org.springframework.util.StringUtils;
 import com.alibaba.druid.pool.DruidDataSource;
 
 import com.misky.ddss.aspect.DataSourceAspect;
+import com.misky.ddss.aspect.LocalTransactionAspect;
 import com.misky.ddss.core.DynamicDataSource;
 import com.misky.ddss.core.GroupDataSource;
 import com.misky.ddss.core.LazyDataSourceProxy;
@@ -41,13 +35,20 @@ import com.misky.ddss.properties.DynamicDataSourceProperties;
  *
  * <p>启用条件：配置了 {@code dp.datasource.datasources} 且至少有一个数据源。</p>
  *
- * <h3>自动注册的 Bean</h3>
+ * <h3>自动注册的 Bean（主配置类）</h3>
  * <ul>
  *   <li>{@code dynamicDataSource} — 动态数据源（始终注册）</li>
  *   <li>{@code dataSourceAspect} — AOP 切面（始终注册）</li>
+ *   <li>{@code localTransactionAspect} — 本地多数据源事务切面（始终注册）</li>
  *   <li>{@code platformTransactionManager} — 事务管理器（始终注册）</li>
- *   <li>{@code sqlSessionFactory} — MyBatis SqlSessionFactory（仅 MyBatis 可用时）</li>
- *   <li>{@code sqlSessionTemplate} — MyBatis SqlSessionTemplate（仅 MyBatis 可用时）</li>
+ * </ul>
+ *
+ * <h3>MyBatis 集成（可选，需 MyBatis 在 classpath 上）</h3>
+ * <p>由 {@link DynamicDataSourceMyBatisAutoConfiguration} 负责注册：</p>
+ * <ul>
+ *   <li>{@code sqlSessionFactory} — MyBatis SqlSessionFactory</li>
+ *   <li>{@code sqlSessionTemplate} — MyBatis SqlSessionTemplate</li>
+ *   <li>{@code dataSourceSqlLogInterceptor} — SQL 执行日志拦截器（需显式启用）</li>
  * </ul>
  *
  * <h3>如何引入</h3>
@@ -194,20 +195,8 @@ public class DynamicDataSourceAutoConfiguration {
     }
 
     @Bean
-    public com.misky.ddss.aspect.LocalTransactionAspect localTransactionAspect() {
-        return new com.misky.ddss.aspect.LocalTransactionAspect();
-    }
-
-    /**
-     * SQL 执行日志拦截器（可选）
-     * <p>通过 {@code dp.datasource.sql-log-enabled=true} 启用。</p>
-     */
-    @Bean
-    @ConditionalOnClass(name = "org.apache.ibatis.plugin.Interceptor")
-    @ConditionalOnProperty(prefix = "dp.datasource", name = "sql-log-enabled", havingValue = "true")
-    public org.apache.ibatis.plugin.Interceptor dataSourceSqlLogInterceptor() {
-        log.info("已启用 SQL 执行日志拦截器");
-        return new com.misky.ddss.interceptor.DataSourceSqlLogInterceptor();
+    public LocalTransactionAspect localTransactionAspect() {
+        return new LocalTransactionAspect();
     }
 
     /**
@@ -258,11 +247,13 @@ public class DynamicDataSourceAutoConfiguration {
                 }
             }
             // 连接验证（fail-fast：配置错误在启动时暴露）
-            try (Connection ignored = dataSource.getConnection()) {
-                log.info("数据源 [{}] 连接验证通过", key);
-            } catch (Exception e) {
-                throw new IllegalStateException(
-                        "数据源 [" + key + "] 连接验证失败，请检查 URL、用户名、密码", e);
+            // 可通过 dp.datasource.connection-validation-enabled=false 关闭
+            if (properties.isConnectionValidationEnabled()) {
+                try (Connection ignored = dataSource.getConnection()) {
+                    log.info("数据源 [{}] 连接验证通过", key);
+                }
+            } else {
+                log.info("数据源 [{}] 已创建（跳过连接验证）", key);
             }
 
             return dataSource;
@@ -278,66 +269,5 @@ public class DynamicDataSourceAutoConfiguration {
     public PlatformTransactionManager platformTransactionManager(
             @Qualifier("dynamicDataSource") DataSource dynamicDataSource) {
         return new DataSourceTransactionManager(dynamicDataSource);
-    }
-
-    // ======================== MyBatis 集成（可选） ========================
-
-    /**
-     * SqlSessionFactory — 仅当 MyBatis 在 classpath 上时才创建
-     */
-    @Bean(name = "sqlSessionFactory")
-    @ConditionalOnClass(SqlSessionFactoryBean.class)
-    @ConditionalOnMissingBean(name = "sqlSessionFactory")
-    public SqlSessionFactory sqlSessionFactory(
-            @Qualifier("dynamicDataSource") DataSource dynamicDataSource,
-            ObjectProvider<org.apache.ibatis.session.Configuration> configurationProvider,
-            ObjectProvider<org.apache.ibatis.plugin.Interceptor> sqlLogInterceptorProvider) throws Exception {
-
-        SqlSessionFactoryBean factoryBean = new SqlSessionFactoryBean();
-        factoryBean.setDataSource(dynamicDataSource);
-
-        // 加载 Mapper XML（如果配置了路径）
-        String[] mapperLocations = properties.getMapperLocations();
-        if (mapperLocations != null && mapperLocations.length > 0) {
-            java.util.List<Resource> resources = new java.util.ArrayList<>();
-            PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
-            for (String location : mapperLocations) {
-                try {
-                    Resource[] found = resolver.getResources(location);
-                    java.util.Collections.addAll(resources, found);
-                } catch (Exception e) {
-                    log.warn("未找到 Mapper XML 文件 [{}]，跳过：{}", location, e.getMessage());
-                }
-            }
-            if (!resources.isEmpty()) {
-                factoryBean.setMapperLocations(resources.toArray(new Resource[0]));
-                log.info("加载 Mapper XML 文件 {} 个", resources.size());
-            }
-        }
-
-        // 驼峰转换
-        org.apache.ibatis.session.Configuration configuration =
-                configurationProvider.getIfAvailable(org.apache.ibatis.session.Configuration::new);
-        if (properties.isMapUnderscoreToCamelCase()) {
-            configuration.setMapUnderscoreToCamelCase(true);
-        }
-        factoryBean.setConfiguration(configuration);
-
-        // 注入 SQL 日志拦截器（如果启用）
-        org.apache.ibatis.plugin.Interceptor sqlLogInterceptor = sqlLogInterceptorProvider.getIfAvailable();
-        if (sqlLogInterceptor != null) {
-            factoryBean.setPlugins(new org.apache.ibatis.plugin.Interceptor[]{sqlLogInterceptor});
-            log.info("已注入 MyBatis 插件：DataSourceSqlLogInterceptor");
-        }
-
-        return factoryBean.getObject();
-    }
-
-    @Bean
-    @ConditionalOnClass(SqlSessionTemplate.class)
-    @ConditionalOnMissingBean(SqlSessionTemplate.class)
-    public SqlSessionTemplate sqlSessionTemplate(
-            @Qualifier("sqlSessionFactory") SqlSessionFactory sqlSessionFactory) {
-        return new SqlSessionTemplate(sqlSessionFactory);
     }
 }

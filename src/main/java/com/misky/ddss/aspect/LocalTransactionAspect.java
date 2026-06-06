@@ -27,7 +27,7 @@ import java.util.List;
 /**
  * 本地多数据源事务切面
  *
- * <p>拦截标注了 {@link LocalTransactionl} 的方法，
+ * <p>拦截标注了 {@link LocalTransactional} 的方法，
  * 在多个数据源上分别开启事务，方法正常结束则依次提交，
  * 抛异常则依次回滚（Best-Efforts 1PC 模式）。</p>
  *

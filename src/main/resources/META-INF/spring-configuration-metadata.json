@@ -24,6 +24,12 @@
       "defaultValue": false
     },
     {
+      "name": "dp.datasource.connection-validation-enabled",
+      "type": "java.lang.Boolean",
+      "description": "启动时是否验证数据源连接（fail-fast）。设为 false 可延迟到首次业务请求时验证",
+      "defaultValue": true
+    },
+    {
       "name": "dp.datasource.datasources",
       "type": "java.util.Map<java.lang.String, java.util.Map<java.lang.String, java.lang.Object>>",
       "description": "所有数据源配置，key 为数据源标识，value 为连接池属性。每个数据源可设置 lazy: true 启用懒加载"

@@ -95,10 +95,11 @@ public class DataSourceAspect {
      * <h3>支持的 SpEL 表达式示例</h3>
      * <ul>
      *   <li>{@code "#tenantId"} — 引用方法参数名为 tenantId 的值</li>
-     *   <li>{@code "#header['X-Tenant-Id']"} — 引用 HTTP 请求头（需配合 Web 环境）</li>
-     *   <li>{@code "#session['user']"} — 引用 Session 属性（需配合 Web 环境）</li>
-     *   <li>{@code "#tenantHolder.get()"} — 调用静态/Bean 方法</li>
+     *   <li>{@code "#dsKey"} — 引用任意方法参数的值作为数据源 key</li>
      * </ul>
+     *
+     * <p>注意：当前版本仅支持方法参数作为 SpEL 变量，
+     * {@code #header}、{@code #session}、{@code @beanName} 等高级用法暂未实现。</p>
      */
     private String resolveDataSourceKey(DataSource methodDs, DataSource classDs, ProceedingJoinPoint point) {
         DataSource dsAnnotation = null;

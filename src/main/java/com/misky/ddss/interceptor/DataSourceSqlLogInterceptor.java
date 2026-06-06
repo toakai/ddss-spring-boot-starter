@@ -49,7 +49,7 @@ public class DataSourceSqlLogInterceptor implements Interceptor {
         MappedStatement ms = (MappedStatement) args[0];
 
         if (log.isDebugEnabled()) {
-            log.debug("[DATASOURCE] 当前数据源：{}，Mapper 方法：{}.{}",
+            log.debug("[DataSourceSqlLog] 当前数据源：{}，Mapper 方法：{}.{}",
                     dataSourceKey, ms.getId());
         }
 
