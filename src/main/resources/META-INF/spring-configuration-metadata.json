@@ -30,7 +30,7 @@
     },
     {
       "name": "dp.datasource.groups",
-      "type": "java.util.Map<java.lang.String, com.misky.ddss.properties.DynamicDataSourceProperties$GroupConfig>",
+      "type": "java.util.Map",
       "description": "数据源分组（读写分离 & 负载均衡），key 为分组名，可通过 @DataSource(\"分组名\") 使用"
     }
   ]
