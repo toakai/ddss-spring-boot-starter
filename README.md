@@ -15,8 +15,8 @@
 - [9. SQL 日志拦截器](#9-sql-日志拦截器)
 - [10. 完整实战示例](#10-完整实战示例)
 - [11. 配置参考](#11-配置参考)
-- [12. 常见问题](#12-常见问题)
-- [13. 架构说明](#13-架构说明)
+- [12. 架构说明](#12-架构说明)
+- [13. 常见问题](#13-常见问题)
 
 ---
 
@@ -586,7 +586,43 @@ dp:
 
 ---
 
-## 12. 常见问题
+## 12. 架构说明
+
+### 12.1 MyBatis 拦截器注册机制
+
+ddss 采用 **后补模式** 注册 MyBatis 拦截器（如 PageHelper 的 `PageInterceptor`）：
+
+1. `SqlSessionFactory` 创建时不急于收集拦截器
+2. 所有 Spring Bean 就绪后，通过 `SmartInitializingSingleton` 回调
+3. 从容器中获取全部 `Interceptor` Bean，通过 `Configuration.addInterceptor()` 统一追加
+
+**为什么需要后补模式？**
+
+PageHelper 等第三方拦截器的自动配置类通常带有 `@ConditionalOnBean(SqlSessionFactory.class)`——也就是说，它们要等 `SqlSessionFactory` 创建后才激活。如果 ddss 在创建 `SqlSessionFactory` 时急切收集拦截器，正好陷入鸡-蛋死锁：
+
+> ddss 收集拦截器时 PageInterceptor 还不存在 → PageHelper 激活时 SqlSessionFactory 已定稿 → 拦截器永远无法注入
+
+**后补模式彻底消除了这个时序问题，对所有带 `@ConditionalOnBean(SqlSessionFactory.class)` 的拦截器自动兼容。**
+
+### 12.2 涉及数据源的依赖链条
+
+```
+dp.datasource.datasources.* (YAML 配置)
+  → DynamicDataSourceAutoConfiguration: 创建 DynamicDataSource + 各组 DataSource
+  → DynamicDataSourceMyBatisAutoConfiguration: 创建 SqlSessionFactory（不急于设置插件）
+  → SmartInitializingSingleton: 统一后补所有 Interceptor
+  → SqlSessionTemplate: 基于 SqlSessionFactory 创建
+```
+
+---
+
+## 写在最后
+
+ddss 追求 **简洁实用**，约定大于配置，开箱即用。如果你在使用中遇到问题或有功能建议，欢迎提 Issue。
+
+---
+
+## 13. 常见问题
 
 ### Q1: 注解不生效？
 
@@ -663,33 +699,3 @@ String current = DynamicDataSource.getDataSource();
 ## 写在最后
 
 ddss 追求 **简洁实用**，约定大于配置，开箱即用。如果你在使用中遇到问题或有功能建议，欢迎提 Issue。
-
----
-
-## 13. 架构说明
-
-### 13.1 MyBatis 拦截器注册机制
-
-ddss 采用 **后补模式** 注册 MyBatis 拦截器（如 PageHelper 的 `PageInterceptor`）：
-
-1. `SqlSessionFactory` 创建时不急于收集拦截器
-2. 所有 Spring Bean 就绪后，通过 `SmartInitializingSingleton` 回调
-3. 从容器中获取全部 `Interceptor` Bean，通过 `Configuration.addInterceptor()` 统一追加
-
-**为什么需要后补模式？**
-
-PageHelper 等第三方拦截器的自动配置类通常带有 `@ConditionalOnBean(SqlSessionFactory.class)`——也就是说，它们要等 `SqlSessionFactory` 创建后才激活。如果 ddss 在创建 `SqlSessionFactory` 时急切收集拦截器，正好陷入鸡-蛋死锁：
-
-> ddss 收集拦截器时 PageInterceptor 还不存在 → PageHelper 激活时 SqlSessionFactory 已定稿 → 拦截器永远无法注入
-
-**后补模式彻底消除了这个时序问题，对所有带 `@ConditionalOnBean(SqlSessionFactory.class)` 的拦截器自动兼容。**
-
-### 13.2 涉及数据源的依赖链条
-
-```
-dp.datasource.datasources.* (YAML 配置)
-  → DynamicDataSourceAutoConfiguration: 创建 DynamicDataSource + 各组 DataSource
-  → DynamicDataSourceMyBatisAutoConfiguration: 创建 SqlSessionFactory（不急于设置插件）
-  → SmartInitializingSingleton: 统一后补所有 Interceptor
-  → SqlSessionTemplate: 基于 SqlSessionFactory 创建
-```
